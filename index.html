@@ -19,15 +19,45 @@
         <header class="flex justify-between items-center px-4 py-2 bg-gray-800 text-white shrink-0 shadow-md">
             <div class="flex flex-col">
                 <h1 class="text-lg md:text-2xl font-bold leading-tight">ラベル照合ツール</h1>
-                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.6</span>
-            </div>
-            <div class="flex items-center gap-2 text-sm md:text-base bg-gray-700 px-3 py-1.5 rounded font-bold">
-                <span class="hidden md:inline">合格ライン:</span>
-                <span class="md:hidden">基準:</span>
-                <input type="range" v-model.number="threshold" min="50" max="100" class="w-16 md:w-24">
-                <span class="w-10 text-right text-blue-300">{{ threshold }}%</span>
+                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.9</span>
             </div>
         </header>
+
+        <!-- 設定パネル -->
+        <div class="bg-gray-700 text-white px-3 py-2 flex flex-wrap items-center justify-between gap-3 text-xs md:text-sm font-bold shrink-0 shadow z-30">
+            <div class="flex items-center gap-1">
+                <span>合格ライン:</span>
+                <input type="range" v-model.number="threshold" min="50" max="100" class="w-16">
+                <span class="w-8 text-right text-blue-300">{{ threshold }}%</span>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <div class="flex items-center gap-1">
+                    <span>言語:</span>
+                    <select v-model="ocrLang" class="bg-gray-600 border border-gray-500 rounded p-1 outline-none text-white cursor-pointer">
+                        <option value="eng">🔤 英数字</option>
+                        <option value="eng+jpn">🇯🇵 日本語含む</option>
+                    </select>
+                </div>
+                
+                <!-- 【変更点】テキスト入力をプルダウン（選択式）に変更 -->
+                <div class="flex items-center gap-1">
+                    <span title="指定した文字だけを読み取ります">絞込:</span>
+                    <select v-model="whitelist" class="w-36 md:w-48 bg-gray-600 border border-gray-500 rounded px-2 py-1 outline-none text-white cursor-pointer truncate">
+                        <option value="">指定なし（すべて）</option>
+                        <!-- 超便利機能：マスターラベルの文字を自動で絞り込みリストに設定する -->
+                        <option value="AUTO">✨ マスターと同じ文字</option>
+                        
+                        <!-- ▼▼▼ 現場用のプリセット（ここを増やせます） ▼▼▼ -->
+                        <option value="NEXTIJ55kg">NEXTIJ55kg</option>
+                        
+                        <!-- ▲▲▲ 品番を増やしたい場合は、上の行をコピーして追加 ▲▲▲ -->
+                        
+                        <option value="A-Z0-9">英数字すべて</option>
+                        <option value="0-9">数字のみ</option>
+                    </select>
+                </div>
+            </div>
+        </div>
 
         <div class="text-sm md:text-xl font-bold text-center py-2 px-2 shrink-0 border-b tracking-wide"
              :class="navigationState.class">
@@ -46,7 +76,6 @@
                             @pointerleave.prevent="onPointerUp">
                     </canvas>
 
-                    <!-- 【変更点】 hidden md:flex を追加し、スマホでは非表示、PC/タブレットでは表示されるように制御 -->
                     <div v-if="status === 'pause'" class="hidden md:flex absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur rounded-lg p-2 items-center gap-2 text-white text-sm shadow-lg border border-gray-600 max-w-md mx-auto z-10">
                         <span class="whitespace-nowrap font-bold">傾き:</span>
                         <input type="range" v-model.number="rotation" min="-30" max="30" step="0.5" class="flex-1" @input="drawFrame">
@@ -181,7 +210,10 @@
                 
                 showConfirmModal: false,
                 tempLabelText: '',
+                
                 threshold: 80,
+                ocrLang: 'eng', 
+                whitelist: '',  
                 
                 dpr: window.devicePixelRatio || 1
             }
@@ -429,11 +461,31 @@
                 try {
                     const worker = Tesseract.createWorker({ logger: log => console.log(log.status) });
                     await worker.load();
-                    await worker.loadLanguage('eng');
-                    await worker.initialize('eng');
-                    await worker.setParameters({
-                        tessedit_pageseg_mode: 7, 
-                    });
+                    await worker.loadLanguage(this.ocrLang);
+                    await worker.initialize(this.ocrLang);
+                    
+                    const params = { tessedit_pageseg_mode: 7 };
+                    
+                    // 【変更点】プルダウンによる絞り込み（ホワイトリスト）の設定処理
+                    let parsedWhitelist = '';
+                    if (this.whitelist === 'AUTO') {
+                        if (this.labelResult) {
+                            // マスターの文字のみを抽出（重複削除）
+                            parsedWhitelist = Array.from(new Set(this.labelResult.replace(/[\s\u3000]+/g, '').split(''))).join('');
+                        }
+                    } else if (this.whitelist !== '') {
+                        parsedWhitelist = this.whitelist
+                            .replace(/0-9/g, '0123456789')
+                            .replace(/A-Z/g, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+                            .replace(/a-z/g, 'abcdefghijklmnopqrstuvwxyz');
+                        parsedWhitelist = Array.from(new Set(parsedWhitelist.split(''))).join('');
+                    }
+
+                    if (parsedWhitelist) {
+                        params.tessedit_char_whitelist = parsedWhitelist;
+                    }
+
+                    await worker.setParameters(params);
                     
                     const result = await worker.recognize(this.tempDataUrl);
                     await worker.terminate();
