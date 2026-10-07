@@ -2,26 +2,28 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <!-- スマホでの拡大縮小を禁止し、1画面に固定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no, user-scalable=no, viewport-fit=cover">
     <title>ラベル照合ツール</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #f3f4f6; overscroll-behavior-y: none; margin: 0; padding: 0; }
-        .result-box { min-height: 4rem; word-break: break-all; font-size: 1.75rem; line-height: 1.3; letter-spacing: 0.05em; }
+        /* 画面全体のスクロールを完全に禁止 */
+        body { background-color: #1f2937; overscroll-behavior-y: none; margin: 0; padding: 0; overflow: hidden; }
+        .result-box { min-height: 4rem; word-break: break-all; font-size: 1.5rem; line-height: 1.3; letter-spacing: 0.05em; }
         @media (min-width: 768px) { .result-box { font-size: 2.25rem; } }
-        /* キャンバスが画面にピッタリ収まるように調整 */
+        /* キャンバスのタッチ操作を最適化 */
         canvas { touch-action: none; cursor: crosshair; display: block; }
         input[type=range] { accent-color: #3b82f6; }
     </style>
 </head>
-<body class="fixed inset-0 flex flex-col text-gray-800 font-sans">
-    <div id="app" class="flex flex-col h-full w-full max-w-7xl mx-auto bg-white shadow-xl">
+<!-- h-[100dvh] を使用し、iPhoneのSafariのアドレスバーを考慮して必ず1画面に収める -->
+<body class="w-screen h-[100dvh] flex flex-col text-gray-800 font-sans">
+    <div id="app" class="flex flex-col h-full w-full max-w-7xl mx-auto bg-white shadow-xl overflow-hidden">
         
-        <!-- 【変更点】バージョン表記を独立させ、スマホでも確実に見えるように2段構成に変更 -->
         <header class="flex justify-between items-center px-4 py-2 bg-gray-800 text-white shrink-0 shadow-md">
             <div class="flex flex-col">
                 <h1 class="text-lg md:text-2xl font-bold leading-tight">ラベル照合ツール</h1>
-                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.4</span>
+                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.5</span>
             </div>
             <div class="flex items-center gap-2 text-sm md:text-base bg-gray-700 px-3 py-1.5 rounded font-bold">
                 <span class="hidden md:inline">合格ライン:</span>
@@ -31,91 +33,96 @@
             </div>
         </header>
 
-        <div class="text-base md:text-xl font-bold text-center py-2 px-2 shrink-0 border-b tracking-wide"
+        <div class="text-sm md:text-xl font-bold text-center py-2 px-2 shrink-0 border-b tracking-wide"
              :class="navigationState.class">
             {{ navigationState.message }}
         </div>
 
         <main class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden bg-gray-100">
             
+            <!-- 【左側 / 上部】カメラ領域 (スマホ時は残りスペースすべて、PC時は左半分) -->
             <section class="flex-1 flex flex-col w-full md:w-1/2 min-w-0 min-h-0 relative bg-black">
-                <!-- 【変更点】余白(p-2)を削除し、画面いっぱいにキャンバスを広げる -->
                 <div ref="canvas-container" class="flex-1 relative overflow-hidden w-full h-full bg-black">
+                    <!-- タッチイベントを最新の Pointer Events に統合して確実な操作を実現 -->
                     <canvas ref="canvas" class="absolute inset-0 w-full h-full"
-                            @mousedown="onPointerDown" @mousemove="onPointerMove" @mouseup="onPointerUp" @mouseleave="onPointerUp"
-                            @touchstart.prevent="onPointerDown" @touchmove.prevent="onPointerMove" @touchend.prevent="onPointerUp">
+                            @pointerdown.prevent="onPointerDown" 
+                            @pointermove.prevent="onPointerMove" 
+                            @pointerup.prevent="onPointerUp" 
+                            @pointercancel.prevent="onPointerUp"
+                            @pointerleave.prevent="onPointerUp">
                     </canvas>
 
-                    <div v-if="status === 'pause'" class="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur rounded-lg p-3 flex items-center gap-3 text-white text-sm md:text-base shadow-lg border border-gray-600 max-w-md mx-auto z-10">
-                        <span class="whitespace-nowrap font-bold">傾き補正:</span>
+                    <div v-if="status === 'pause'" class="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur rounded-lg p-2 flex items-center gap-2 text-white text-sm shadow-lg border border-gray-600 max-w-md mx-auto z-10">
+                        <span class="whitespace-nowrap font-bold">傾き:</span>
                         <input type="range" v-model.number="rotation" min="-30" max="30" step="0.5" class="flex-1" @input="drawFrame">
-                        <span class="w-12 text-right font-mono font-bold">{{ rotation > 0 ? '+'+rotation : rotation }}°</span>
-                        <button @click="rotation=0; drawFrame()" class="bg-gray-600 hover:bg-gray-500 px-4 py-2 rounded font-bold transition">戻す</button>
+                        <span class="w-10 text-right font-mono font-bold">{{ rotation > 0 ? '+'+rotation : rotation }}°</span>
+                        <button @click="rotation=0; drawFrame()" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">戻す</button>
                     </div>
                 </div>
                 
-                <div class="bg-gray-900 p-3 shrink-0 flex justify-center items-center gap-2 z-20 relative">
+                <div class="bg-gray-900 p-2 shrink-0 flex justify-center items-center gap-2 z-20 relative">
                     <div v-if="status === 'play'" class="w-full max-w-sm">
-                        <button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 px-4 w-full rounded shadow-lg text-xl md:text-2xl tracking-wider" @click="takeSnapshot">
+                        <button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 md:py-5 px-4 w-full rounded shadow-lg text-lg md:text-2xl tracking-wider" @click="takeSnapshot">
                             スナップショットを撮る
                         </button>
                     </div>
                     <div v-if="status === 'pause' && !showConfirmModal" class="flex w-full max-w-sm gap-2">
-                        <button class="bg-white text-gray-800 font-bold py-5 px-2 w-1/3 rounded shadow-lg text-lg md:text-xl" @click="playVideo">
+                        <button class="bg-white text-gray-800 font-bold py-3 md:py-5 px-2 w-1/3 rounded shadow-lg text-base md:text-xl" @click="playVideo">
                             やり直す
                         </button>
-                        <button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-5 px-2 w-2/3 rounded shadow-lg text-xl md:text-2xl tracking-wider" @click="runOcr">
+                        <button class="bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 md:py-5 px-2 w-2/3 rounded shadow-lg text-lg md:text-2xl tracking-wider" @click="runOcr">
                             枠内を読み取る
                         </button>
                     </div>
-                    <div v-if="status === 'reading'" class="text-blue-400 font-bold py-5 text-xl">
+                    <div v-if="status === 'reading'" class="text-blue-400 font-bold py-3 md:py-5 text-lg md:text-xl">
                         OCR解析中...
                     </div>
                 </div>
             </section>
 
-            <section class="flex flex-col w-full md:w-1/2 shrink-0 bg-white border-t md:border-t-0 md:border-l border-gray-200 overflow-y-auto max-h-[45vh] md:max-h-full">
-                <div class="p-4 md:p-6 space-y-6">
+            <!-- 【右側 / 下部】結果領域 (スマホ時は高さの45%を確保、PC時は右半分) -->
+            <section class="flex flex-col h-[45%] md:h-full w-full md:w-1/2 shrink-0 bg-white border-t md:border-t-0 md:border-l border-gray-200 overflow-y-auto">
+                <div class="p-3 md:p-6 space-y-4 md:space-y-6">
                     
-                    <div v-if="labelResult && tableResult" class="text-center p-4 rounded-lg font-bold shadow-inner flex flex-col items-center justify-center" 
+                    <div v-if="labelResult && tableResult" class="text-center p-3 rounded-lg font-bold shadow-inner flex flex-col items-center justify-center" 
                          :class="isMatch ? 'bg-green-100 text-green-800 border-2 border-green-400' : 'bg-red-100 text-red-800 border-2 border-red-400'">
-                        <div class="text-base md:text-lg mb-1">部分一致率: <span class="text-3xl md:text-4xl">{{ currentMatchRate }}%</span></div>
-                        <span class="text-2xl md:text-3xl mt-1 tracking-widest">{{ isMatch ? '照合OK' : '不一致' }}</span>
+                        <div class="text-sm md:text-lg mb-1">部分一致率: <span class="text-2xl md:text-4xl">{{ currentMatchRate }}%</span></div>
+                        <span class="text-xl md:text-3xl mt-1 tracking-widest">{{ isMatch ? '照合OK' : '不一致' }}</span>
                     </div>
                     
                     <div>
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-lg md:text-xl font-bold text-gray-700">① マスターラベル</span>
-                            <span v-if="labelResult" class="text-xs md:text-sm px-3 py-1 rounded font-bold" :class="isMatch ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-700'">
+                        <div class="flex justify-between items-center mb-1 md:mb-2">
+                            <span class="text-base md:text-xl font-bold text-gray-700">① マスターラベル</span>
+                            <span v-if="labelResult" class="text-[10px] md:text-sm px-2 py-1 rounded font-bold" :class="isMatch ? 'bg-green-200 text-green-800' : 'bg-gray-200 text-gray-700'">
                                 {{ isMatch ? '照合済' : 'ロック中' }}
                             </span>
                         </div>
-                        <div class="bg-gray-50 border-2 border-gray-300 p-3 rounded result-box font-mono font-bold text-gray-800 shadow-inner flex items-center">
+                        <div class="bg-gray-50 border-2 border-gray-300 p-2 md:p-3 rounded result-box font-mono font-bold text-gray-800 shadow-inner flex items-center">
                             {{ labelResult || '未読み取り' }}
                         </div>
                     </div>
 
                     <div>
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-lg md:text-xl font-bold text-gray-700">② 件数表</span>
+                        <div class="flex justify-between items-center mb-1 md:mb-2">
+                            <span class="text-base md:text-xl font-bold text-gray-700">② 件数表</span>
                         </div>
-                        <div class="bg-blue-50 border-2 border-blue-400 p-3 rounded result-box font-mono font-bold text-blue-900 shadow-inner flex items-center">
+                        <div class="bg-blue-50 border-2 border-blue-400 p-2 md:p-3 rounded result-box font-mono font-bold text-blue-900 shadow-inner flex items-center">
                             {{ tableResult || '未読み取り' }}
                         </div>
                     </div>
 
-                    <div v-if="labelDataUrl || tableDataUrl" class="border-t-2 pt-4 mt-2">
-                        <span class="text-sm font-bold text-gray-600 mb-2 block">クロップ画像確認（白黒処理済）</span>
-                        <div class="grid grid-cols-2 gap-3">
+                    <div v-if="labelDataUrl || tableDataUrl" class="border-t-2 pt-3 mt-1">
+                        <span class="text-xs md:text-sm font-bold text-gray-600 mb-2 block">クロップ画像確認（白黒処理済）</span>
+                        <div class="grid grid-cols-2 gap-2">
                             <div class="border-2 rounded bg-gray-50 flex flex-col p-1">
-                                <span class="text-xs font-bold text-center text-gray-600 mb-1">① ラベル</span>
-                                <div class="h-20 w-full flex items-center justify-center overflow-hidden bg-white rounded">
+                                <span class="text-[10px] text-center text-gray-600 mb-1">① ラベル</span>
+                                <div class="h-12 md:h-20 w-full flex items-center justify-center overflow-hidden bg-white rounded">
                                     <img v-if="labelDataUrl" :src="labelDataUrl" class="max-h-full max-w-full object-contain">
                                 </div>
                             </div>
                             <div class="border-2 rounded bg-gray-50 flex flex-col p-1">
-                                <span class="text-xs font-bold text-center text-gray-600 mb-1">② 件数表</span>
-                                <div class="h-20 w-full flex items-center justify-center overflow-hidden bg-white rounded">
+                                <span class="text-[10px] text-center text-gray-600 mb-1">② 件数表</span>
+                                <div class="h-12 md:h-20 w-full flex items-center justify-center overflow-hidden bg-white rounded">
                                     <img v-if="tableDataUrl" :src="tableDataUrl" class="max-h-full max-w-full object-contain">
                                 </div>
                             </div>
@@ -123,7 +130,7 @@
                     </div>
 
                     <div class="text-right pt-2 pb-6">
-                        <button class="text-sm md:text-base font-bold text-red-600 hover:bg-red-50 py-2 px-5 rounded border-2 border-red-300 transition" @click="resetResults">
+                        <button class="text-xs md:text-base font-bold text-red-600 hover:bg-red-50 py-2 px-4 md:px-5 rounded border-2 border-red-300 transition" @click="resetResults">
                             強制リセット
                         </button>
                     </div>
@@ -134,20 +141,20 @@
 
         <div v-if="showConfirmModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 backdrop-blur-sm">
             <div class="bg-white/95 rounded-xl shadow-2xl w-full max-w-md overflow-hidden transform transition-all border-2 border-gray-400">
-                <div class="bg-blue-600 text-white font-bold p-4 text-xl text-center tracking-wider">
+                <div class="bg-blue-600 text-white font-bold p-3 text-lg md:text-xl text-center tracking-wider">
                     マスター内容の確認
                 </div>
-                <div class="p-6">
-                    <p class="text-base md:text-lg text-gray-800 mb-4 font-bold text-center">以下の内容で登録しますか？</p>
-                    <div class="bg-gray-100 border-2 border-gray-300 p-4 rounded text-2xl md:text-3xl font-mono font-bold text-center break-words shadow-inner min-h-[4rem] flex items-center justify-center">
+                <div class="p-5">
+                    <p class="text-sm md:text-lg text-gray-800 mb-3 font-bold text-center">以下の内容で登録しますか？</p>
+                    <div class="bg-gray-100 border-2 border-gray-300 p-3 rounded text-xl md:text-3xl font-mono font-bold text-center break-words shadow-inner min-h-[3rem] flex items-center justify-center">
                         {{ tempLabelText }}
                     </div>
                 </div>
                 <div class="flex border-t-2 border-gray-300 bg-gray-50">
-                    <button @click="confirmMaster(false)" class="w-1/2 py-5 font-bold text-gray-700 hover:bg-gray-200 border-r-2 border-gray-300 text-xl transition">
+                    <button @click="confirmMaster(false)" class="w-1/2 py-4 font-bold text-gray-700 hover:bg-gray-200 border-r-2 border-gray-300 text-lg transition">
                         NG (戻る)
                     </button>
-                    <button @click="confirmMaster(true)" class="w-1/2 py-5 font-bold text-blue-700 hover:bg-blue-100 text-xl transition">
+                    <button @click="confirmMaster(true)" class="w-1/2 py-4 font-bold text-blue-700 hover:bg-blue-100 text-lg transition">
                         OK (決定)
                     </button>
                 </div>
@@ -180,7 +187,10 @@
                 
                 showConfirmModal: false,
                 tempLabelText: '',
-                threshold: 80
+                threshold: 80,
+                
+                // 画面解像度比率（iPhone対策用）
+                dpr: window.devicePixelRatio || 1
             }
         },
         computed: {
@@ -258,31 +268,26 @@
                             return;
                         }
                         
-                        // 【変更点】コンテナの実サイズに合わせてキャンバスを設定（iPhone対策）
                         const container = this.$refs['canvas-container'];
-                        // 高画質を維持するためにデバイスのピクセル比率を使用
-                        const dpr = window.devicePixelRatio || 1;
-                        
-                        this.canvas.width = container.clientWidth * dpr;
-                        this.canvas.height = container.clientHeight * dpr;
-                        
-                        const initW = this.canvas.width * 0.7;
-                        const initH = this.canvas.height * 0.2;
-                        this.guideRect = { x: (this.canvas.width - initW) / 2, y: (this.canvas.height - initH) / 2, w: initW, h: initH };
-                        
+                        if (container) {
+                            this.canvas.width = container.clientWidth * this.dpr;
+                            this.canvas.height = container.clientHeight * this.dpr;
+                            
+                            const initW = this.canvas.width * 0.7;
+                            const initH = this.canvas.height * 0.2;
+                            this.guideRect = { x: (this.canvas.width - initW) / 2, y: (this.canvas.height - initH) / 2, w: initW, h: initH };
+                        }
                         this.renderLoop();
                     };
                     
                     this.video.addEventListener('loadedmetadata', setCanvasSize);
                     
-                    // 画面回転時などのリサイズ対応
                     window.addEventListener('resize', () => {
                         if(this.status === 'play' && this.video.videoWidth > 0) {
                             const container = this.$refs['canvas-container'];
-                            const dpr = window.devicePixelRatio || 1;
                             if (container) {
-                                this.canvas.width = container.clientWidth * dpr;
-                                this.canvas.height = container.clientHeight * dpr;
+                                this.canvas.width = container.clientWidth * this.dpr;
+                                this.canvas.height = container.clientHeight * this.dpr;
                                 const initW = this.canvas.width * 0.7;
                                 const initH = this.canvas.height * 0.2;
                                 this.guideRect = { x: (this.canvas.width - initW) / 2, y: (this.canvas.height - initH) / 2, w: initW, h: initH };
@@ -299,7 +304,6 @@
                 .catch(error => alert("カメラの起動に失敗しました: " + error));
             },
             
-            // 映像をキャンバスいっぱいにカバー（object-fit: cover 相当）して描画する関数
             drawVideoCover(ctx, canvasWidth, canvasHeight) {
                 const vw = this.video.videoWidth;
                 const vh = this.video.videoHeight;
@@ -320,7 +324,6 @@
             drawFrame() {
                 if(!this.video || this.video.readyState !== this.video.HAVE_ENOUGH_DATA) return;
                 
-                // キャンバス全体に映像を描画（iPhoneの極小化を防止）
                 this.drawVideoCover(this.context, this.canvas.width, this.canvas.height);
                 
                 if (this.status !== 'play') {
@@ -332,13 +335,15 @@
                     this.context.fillRect(x + w, y, this.canvas.width - (x + w), h); 
                     
                     this.context.strokeStyle = '#3b82f6';
-                    this.context.lineWidth = Math.max(4, this.canvas.width * 0.006); 
+                    // 線の太さもスマホ用に最適化
+                    this.context.lineWidth = 2 * this.dpr;
                     this.context.strokeRect(x, y, w, h);
                     
-                    const handleRadius = Math.max(16, this.canvas.width * 0.025); // タッチ用ハンドルをさらに大きく
+                    // タッチしやすいようにハンドルを大きく
+                    const handleRadius = 10 * this.dpr;
                     this.context.fillStyle = '#ffffff';
                     this.context.strokeStyle = '#3b82f6';
-                    this.context.lineWidth = 4;
+                    this.context.lineWidth = 2 * this.dpr;
                     const corners = [{ cx: x, cy: y }, { cx: x + w, cy: y }, { cx: x, cy: y + h }, { cx: x + w, cy: y + h }];
                     corners.forEach(corner => {
                         this.context.beginPath();
@@ -355,18 +360,18 @@
 
             getPointerPos(e) {
                 const rect = this.canvas.getBoundingClientRect();
-                const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                const clientY = e.touches ? e.touches[0].clientY : e.clientY;
                 const scaleX = this.canvas.width / rect.width;
                 const scaleY = this.canvas.height / rect.height;
-                return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+                // Pointer Eventを使用するため直接 e.clientX を取得
+                return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
             },
             onPointerDown(e) {
                 if (this.status !== 'pause') return;
 
                 const pos = this.getPointerPos(e);
                 const { x, y, w, h } = this.guideRect;
-                const hitRadius = Math.max(60, this.canvas.width * 0.08); 
+                // タッチ判定を「画面上の40px相当」に固定して指で確実につかめるようにする
+                const hitRadius = 40 * this.dpr;
                 
                 this.dragInfo.lastX = pos.x;
                 this.dragInfo.lastY = pos.y;
@@ -385,7 +390,7 @@
                 const dx = pos.x - this.dragInfo.lastX;
                 const dy = pos.y - this.dragInfo.lastY;
                 let { x, y, w, h } = this.guideRect;
-                const minSize = 40; 
+                const minSize = 40 * this.dpr; 
                 
                 if (this.dragInfo.type === 'tl') { x += dx; y += dy; w -= dx; h -= dy; }
                 else if (this.dragInfo.type === 'tr') { y += dy; w += dx; h -= dy; }
@@ -412,14 +417,12 @@
             async runOcr() { 
                 const { x, y, w, h } = this.guideRect;
                 
-                // 1. 映像だけを描画した見えないフルキャンバスを作成
                 const fullCanvas = document.createElement('canvas');
                 fullCanvas.width = this.canvas.width;
                 fullCanvas.height = this.canvas.height;
                 const fullCtx = fullCanvas.getContext('2d');
                 this.drawVideoCover(fullCtx, fullCanvas.width, fullCanvas.height);
                 
-                // 2. 枠の部分だけを切り取り、フィルターをかける
                 const tempCanvas = document.createElement('canvas');
                 tempCanvas.width = w;
                 tempCanvas.height = h;
@@ -429,7 +432,6 @@
                 tempCtx.fillRect(0, 0, w, h);
                 tempCtx.filter = 'grayscale(100%) contrast(150%) brightness(110%)';
                 
-                // 映像キャンバスから指定の座標を切り抜く
                 tempCtx.drawImage(fullCanvas, x, y, w, h, 0, 0, w, h);
                 
                 this.tempDataUrl = tempCanvas.toDataURL('image/jpeg');
