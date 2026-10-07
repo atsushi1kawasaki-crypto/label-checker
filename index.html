@@ -2,28 +2,24 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <!-- スマホでの拡大縮小を禁止し、1画面に固定 -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, shrink-to-fit=no, user-scalable=no, viewport-fit=cover">
     <title>ラベル照合ツール</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        /* 画面全体のスクロールを完全に禁止 */
         body { background-color: #1f2937; overscroll-behavior-y: none; margin: 0; padding: 0; overflow: hidden; }
         .result-box { min-height: 4rem; word-break: break-all; font-size: 1.5rem; line-height: 1.3; letter-spacing: 0.05em; }
         @media (min-width: 768px) { .result-box { font-size: 2.25rem; } }
-        /* キャンバスのタッチ操作を最適化 */
         canvas { touch-action: none; cursor: crosshair; display: block; }
         input[type=range] { accent-color: #3b82f6; }
     </style>
 </head>
-<!-- h-[100dvh] を使用し、iPhoneのSafariのアドレスバーを考慮して必ず1画面に収める -->
 <body class="w-screen h-[100dvh] flex flex-col text-gray-800 font-sans">
     <div id="app" class="flex flex-col h-full w-full max-w-7xl mx-auto bg-white shadow-xl overflow-hidden">
         
         <header class="flex justify-between items-center px-4 py-2 bg-gray-800 text-white shrink-0 shadow-md">
             <div class="flex flex-col">
                 <h1 class="text-lg md:text-2xl font-bold leading-tight">ラベル照合ツール</h1>
-                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.5</span>
+                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.6</span>
             </div>
             <div class="flex items-center gap-2 text-sm md:text-base bg-gray-700 px-3 py-1.5 rounded font-bold">
                 <span class="hidden md:inline">合格ライン:</span>
@@ -40,10 +36,8 @@
 
         <main class="flex-1 flex flex-col md:flex-row min-h-0 overflow-hidden bg-gray-100">
             
-            <!-- 【左側 / 上部】カメラ領域 (スマホ時は残りスペースすべて、PC時は左半分) -->
             <section class="flex-1 flex flex-col w-full md:w-1/2 min-w-0 min-h-0 relative bg-black">
                 <div ref="canvas-container" class="flex-1 relative overflow-hidden w-full h-full bg-black">
-                    <!-- タッチイベントを最新の Pointer Events に統合して確実な操作を実現 -->
                     <canvas ref="canvas" class="absolute inset-0 w-full h-full"
                             @pointerdown.prevent="onPointerDown" 
                             @pointermove.prevent="onPointerMove" 
@@ -52,7 +46,8 @@
                             @pointerleave.prevent="onPointerUp">
                     </canvas>
 
-                    <div v-if="status === 'pause'" class="absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur rounded-lg p-2 flex items-center gap-2 text-white text-sm shadow-lg border border-gray-600 max-w-md mx-auto z-10">
+                    <!-- 【変更点】 hidden md:flex を追加し、スマホでは非表示、PC/タブレットでは表示されるように制御 -->
+                    <div v-if="status === 'pause'" class="hidden md:flex absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur rounded-lg p-2 items-center gap-2 text-white text-sm shadow-lg border border-gray-600 max-w-md mx-auto z-10">
                         <span class="whitespace-nowrap font-bold">傾き:</span>
                         <input type="range" v-model.number="rotation" min="-30" max="30" step="0.5" class="flex-1" @input="drawFrame">
                         <span class="w-10 text-right font-mono font-bold">{{ rotation > 0 ? '+'+rotation : rotation }}°</span>
@@ -80,7 +75,6 @@
                 </div>
             </section>
 
-            <!-- 【右側 / 下部】結果領域 (スマホ時は高さの45%を確保、PC時は右半分) -->
             <section class="flex flex-col h-[45%] md:h-full w-full md:w-1/2 shrink-0 bg-white border-t md:border-t-0 md:border-l border-gray-200 overflow-y-auto">
                 <div class="p-3 md:p-6 space-y-4 md:space-y-6">
                     
@@ -189,7 +183,6 @@
                 tempLabelText: '',
                 threshold: 80,
                 
-                // 画面解像度比率（iPhone対策用）
                 dpr: window.devicePixelRatio || 1
             }
         },
@@ -335,15 +328,13 @@
                     this.context.fillRect(x + w, y, this.canvas.width - (x + w), h); 
                     
                     this.context.strokeStyle = '#3b82f6';
-                    // 線の太さもスマホ用に最適化
-                    this.context.lineWidth = 2 * this.dpr;
+                    this.context.lineWidth = Math.max(4, this.canvas.width * 0.006); 
                     this.context.strokeRect(x, y, w, h);
                     
-                    // タッチしやすいようにハンドルを大きく
-                    const handleRadius = 10 * this.dpr;
+                    const handleRadius = Math.max(16, this.canvas.width * 0.025); 
                     this.context.fillStyle = '#ffffff';
                     this.context.strokeStyle = '#3b82f6';
-                    this.context.lineWidth = 2 * this.dpr;
+                    this.context.lineWidth = 4;
                     const corners = [{ cx: x, cy: y }, { cx: x + w, cy: y }, { cx: x, cy: y + h }, { cx: x + w, cy: y + h }];
                     corners.forEach(corner => {
                         this.context.beginPath();
@@ -362,7 +353,6 @@
                 const rect = this.canvas.getBoundingClientRect();
                 const scaleX = this.canvas.width / rect.width;
                 const scaleY = this.canvas.height / rect.height;
-                // Pointer Eventを使用するため直接 e.clientX を取得
                 return { x: (e.clientX - rect.left) * scaleX, y: (e.clientY - rect.top) * scaleY };
             },
             onPointerDown(e) {
@@ -370,8 +360,7 @@
 
                 const pos = this.getPointerPos(e);
                 const { x, y, w, h } = this.guideRect;
-                // タッチ判定を「画面上の40px相当」に固定して指で確実につかめるようにする
-                const hitRadius = 40 * this.dpr;
+                const hitRadius = Math.max(60, this.canvas.width * 0.08); 
                 
                 this.dragInfo.lastX = pos.x;
                 this.dragInfo.lastY = pos.y;
