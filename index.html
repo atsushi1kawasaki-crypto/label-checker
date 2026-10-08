@@ -19,11 +19,10 @@
         <header class="flex justify-between items-center px-4 py-2 bg-gray-800 text-white shrink-0 shadow-md">
             <div class="flex flex-col">
                 <h1 class="text-lg md:text-2xl font-bold leading-tight">ラベル照合ツール</h1>
-                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.9</span>
+                <span class="text-xs md:text-sm text-green-400 font-bold tracking-wider mt-0.5">Ver. 1.10</span>
             </div>
         </header>
 
-        <!-- 設定パネル -->
         <div class="bg-gray-700 text-white px-3 py-2 flex flex-wrap items-center justify-between gap-3 text-xs md:text-sm font-bold shrink-0 shadow z-30">
             <div class="flex items-center gap-1">
                 <span>合格ライン:</span>
@@ -38,20 +37,12 @@
                         <option value="eng+jpn">🇯🇵 日本語含む</option>
                     </select>
                 </div>
-                
-                <!-- 【変更点】テキスト入力をプルダウン（選択式）に変更 -->
                 <div class="flex items-center gap-1">
                     <span title="指定した文字だけを読み取ります">絞込:</span>
                     <select v-model="whitelist" class="w-36 md:w-48 bg-gray-600 border border-gray-500 rounded px-2 py-1 outline-none text-white cursor-pointer truncate">
                         <option value="">指定なし（すべて）</option>
-                        <!-- 超便利機能：マスターラベルの文字を自動で絞り込みリストに設定する -->
                         <option value="AUTO">✨ マスターと同じ文字</option>
-                        
-                        <!-- ▼▼▼ 現場用のプリセット（ここを増やせます） ▼▼▼ -->
                         <option value="NEXTIJ55kg">NEXTIJ55kg</option>
-                        
-                        <!-- ▲▲▲ 品番を増やしたい場合は、上の行をコピーして追加 ▲▲▲ -->
-                        
                         <option value="A-Z0-9">英数字すべて</option>
                         <option value="0-9">数字のみ</option>
                     </select>
@@ -76,11 +67,17 @@
                             @pointerleave.prevent="onPointerUp">
                     </canvas>
 
-                    <div v-if="status === 'pause'" class="hidden md:flex absolute bottom-4 left-4 right-4 bg-black/70 backdrop-blur rounded-lg p-2 items-center gap-2 text-white text-sm shadow-lg border border-gray-600 max-w-md mx-auto z-10">
-                        <span class="whitespace-nowrap font-bold">傾き:</span>
-                        <input type="range" v-model.number="rotation" min="-30" max="30" step="0.5" class="flex-1" @input="drawFrame">
-                        <span class="w-10 text-right font-mono font-bold">{{ rotation > 0 ? '+'+rotation : rotation }}°</span>
-                        <button @click="rotation=0; drawFrame()" class="bg-gray-600 hover:bg-gray-500 px-3 py-1 rounded font-bold">戻す</button>
+                    <!-- 【変更点】操作方法のヒントを上部に表示 -->
+                    <div v-if="status === 'pause'" class="absolute top-4 w-full flex justify-center z-10 pointer-events-none">
+                        <span class="bg-black/60 text-white text-xs md:text-sm px-4 py-2 rounded-full font-bold backdrop-blur-sm border border-gray-500 shadow">
+                            💡 青枠の外側を上下になぞって傾きを調整
+                        </span>
+                    </div>
+
+                    <!-- 【変更点】スライダーを廃止し、傾いている時だけリセットボタンを表示 -->
+                    <div v-if="status === 'pause' && rotation !== 0" class="absolute bottom-4 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-sm rounded-full p-2 flex items-center gap-3 text-white text-sm shadow-lg border border-gray-600 z-10">
+                        <span class="whitespace-nowrap font-bold pl-3">傾き: {{ rotation.toFixed(1) }}°</span>
+                        <button @click="rotation=0; drawFrame()" class="bg-gray-600 hover:bg-gray-500 px-4 py-1.5 rounded-full font-bold transition">0°に戻す</button>
                     </div>
                 </div>
                 
@@ -398,12 +395,13 @@
                 this.dragInfo.lastY = pos.y;
                 this.dragInfo.isDragging = true;
                 
+                // 【変更点】枠外のタップを「回転（rotate）」として判定する
                 if (Math.hypot(pos.x - x, pos.y - y) < hitRadius) this.dragInfo.type = 'tl';
                 else if (Math.hypot(pos.x - (x + w), pos.y - y) < hitRadius) this.dragInfo.type = 'tr';
                 else if (Math.hypot(pos.x - x, pos.y - (y + h)) < hitRadius) this.dragInfo.type = 'bl';
                 else if (Math.hypot(pos.x - (x + w), pos.y - (y + h)) < hitRadius) this.dragInfo.type = 'br';
                 else if (pos.x > x && pos.x < x + w && pos.y > y && pos.y < y + h) this.dragInfo.type = 'move';
-                else this.dragInfo.isDragging = false;
+                else this.dragInfo.type = 'rotate';
             },
             onPointerMove(e) {
                 if (!this.dragInfo.isDragging) return;
@@ -413,6 +411,20 @@
                 let { x, y, w, h } = this.guideRect;
                 const minSize = 40 * this.dpr; 
                 
+                // 【変更点】回転操作の処理（上下スワイプで回転角度を調整）
+                if (this.dragInfo.type === 'rotate') {
+                    // スワイプの感度（数値を小さくするとゆっくり回る）
+                    this.rotation -= dy * 0.15;
+                    // 回転角を-45度〜45度に制限
+                    if (this.rotation > 45) this.rotation = 45;
+                    if (this.rotation < -45) this.rotation = -45;
+                    
+                    this.dragInfo.lastX = pos.x;
+                    this.dragInfo.lastY = pos.y;
+                    this.drawFrame();
+                    return; // 枠の移動はスキップ
+                }
+
                 if (this.dragInfo.type === 'tl') { x += dx; y += dy; w -= dx; h -= dy; }
                 else if (this.dragInfo.type === 'tr') { y += dy; w += dx; h -= dy; }
                 else if (this.dragInfo.type === 'bl') { x += dx; w -= dx; h += dy; }
@@ -466,11 +478,9 @@
                     
                     const params = { tessedit_pageseg_mode: 7 };
                     
-                    // 【変更点】プルダウンによる絞り込み（ホワイトリスト）の設定処理
                     let parsedWhitelist = '';
                     if (this.whitelist === 'AUTO') {
                         if (this.labelResult) {
-                            // マスターの文字のみを抽出（重複削除）
                             parsedWhitelist = Array.from(new Set(this.labelResult.replace(/[\s\u3000]+/g, '').split(''))).join('');
                         }
                     } else if (this.whitelist !== '') {
